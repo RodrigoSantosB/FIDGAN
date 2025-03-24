@@ -1,21 +1,25 @@
-import data_utils
-import utils
 import json
+from time import time
+
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from time import time
-from mod_core_rnn_cell_impl import LSTMCell  # modified to allow initializing bias in lstm
-import autoencoderFunctions
-import mmd
 import keras
 # import tensorflow_addons as tfa
 
+# Local application imports
+import data_utils
+import utils
+import autoencoderFunctions
+import mmd
+from mod_core_rnn_cell_impl import LSTMCell
+
+# Initialize script timing ---------------------------------------------------------------------------------------------
 begin = time()
 tf.compat.v1.disable_eager_execution()
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-# Load Data ------------------------------------------------------------------------------------------------------------
+# Parse and load settings ----------------------------------------------------------------------------------------------
 # --- get settings --- #
 # parse command line arguments, or use defaults
 parser = utils.rgan_options_parser()
@@ -23,27 +27,37 @@ settings = vars(parser.parse_args())
 # if a settings file is specified, it overrides command line arguments/defaults
 if settings['settings_file']: settings = utils.load_settings_from_file(settings)
 
-# --- get data, split --- #
-# samples, pdf, labels = data_utils.get_data(settings)
-data_path = './datasets/' + settings['data_load_from']
-print('Loading data from', data_path)
+# Load Data ------------------------------------------------------------------------------------------------------------
+data_path = f'./datasets/{settings["data_load_from"]}'
+print(f'Loading data from {data_path}')
+
+# Set evaluation flags
 settings["eval_an"] = False
 settings["eval_single"] = False
-samples, labels, index = data_utils.get_data(settings["data"], settings["seq_length"], settings["seq_step"],
-                                             settings["num_signals_autoencoder"], settings['sub_id'], settings["eval_single"],
-                                             settings["eval_an"], data_path)
+# samples, pdf, labels = data_utils.get_data(settings)
 
-# -- number of variables -- #
+samples, labels, index = data_utils.get_data(
+    settings["data"], settings["seq_length"], settings["seq_step"],
+    settings["num_signals_autoencoder"], settings['sub_id'], settings["eval_single"],
+    settings["eval_an"], data_path
+)
+
+# Determine the number of variables
 num_variables = samples.shape[2]
-print('num_variables:', num_variables)
-# --- save settings, data --- #
+print(f'num_variables: {num_variables}')
+
+# Save settings and print them 
 print('Ready to run with settings:')
-for (k, v) in settings.items(): print(v, '\t', k)
-# add the settings to local environment
-# WARNING: at this point a lot of variables appear
+for k, v in settings.items():
+    print(f'{v} \t {k}')
+
+# Add settings to local environment
 locals().update(settings)
-json.dump(settings, open('./experiments/settings/' + identifier + '.txt', 'w'), indent=0)
-#-----------------------------------------------------------------------------------------------------------------------
+
+# Save settings to a file
+settings_path = f'./experiments/settings/{identifier}.txt'
+with open(settings_path, 'w') as f:
+    json.dump(settings, f, indent=0)
 
 # Locally defined parameters and paths ---------------------------------------------------------------------------------
 batch_size = settings["batch_size_autoencoder"]
@@ -57,18 +71,20 @@ display_step = settings["display_step_autoencoder"]
 path_autoencoder_training_parameters = settings["path_autoencoder_training_parameters"]
 path_autoencoder_training_results = settings["path_autoencoder_training_results"]
 generatorEpoch = settings["generatorEpoch"]
-#-----------------------------------------------------------------------------------------------------------------------
 
 # Create Encoder Model -------------------------------------------------------------------------------------------------
 X = tf.compat.v1.placeholder(tf.float32, [batch_size, seq_length, num_signals])
-z_enc_outputs = autoencoderFunctions.encoderModel(X, hidden_units, seq_length, batch_size, latent_dim, reuse=False, parameters=None)
-#-----------------------------------------------------------------------------------------------------------------------
+z_enc_outputs = autoencoderFunctions.encoderModel(
+    X, hidden_units, seq_length, batch_size, latent_dim, reuse=False, parameters=None
+)
 
 # Load Pre Trained Generator Model -------------------------------------------------------------------------------------
 para_path = './experiments/parameters/' + settings['sub_id'] + '_' + str(settings['seq_length']) + '_' + str(generatorEpoch) + '.npy'
 parameters = autoencoderFunctions.loadParameters(para_path)
-x_dec_outputs, x_dec_outputs_l = autoencoderFunctions.generatorModel(z_enc_outputs, settings['hidden_units_g'], settings['seq_length'], batch_size, settings['num_generated_features'], reuse=False, parameters=parameters)
-#-----------------------------------------------------------------------------------------------------------------------
+x_dec_outputs, x_dec_outputs_l = autoencoderFunctions.generatorModel(
+    z_enc_outputs, settings['hidden_units_g'], settings['seq_length'], 
+    batch_size, settings['num_generated_features'], reuse=False, parameters=parameters
+)
 
 # Get true and prediction outputs --------------------------------------------------------------------------------------
 encoder_inputs = [tf.compat.v1.reshape(X, [-1, num_signals])]
@@ -79,7 +95,6 @@ decoder_outputs = [tf.compat.v1.reshape(x_dec_outputs, [-1, num_signals])]
 y_true = [tf.compat.v1.reshape(yt, [-1]) for yt in encoder_inputs]
 y_encoded = [tf.compat.v1.reshape(ye, [-1]) for ye in encoder_outputs]
 y_pred = [tf.compat.v1.reshape(yp, [-1]) for yp in decoder_outputs]
-#-----------------------------------------------------------------------------------------------------------------------
 
 # Load the trained Discriminator and Evaluate its value for x and G(E(x)) ----------------------------------------------
 # d_output_xr, d_logits_xr = autoencoderFunctions.discriminatorModel(X, settings['hidden_units_d'], reuse=False, parameters=parameters)
@@ -90,24 +105,26 @@ y_pred = [tf.compat.v1.reshape(yp, [-1]) for yp in decoder_outputs]
 
 # d_y_true = [tf.reshape(dyt, [-1]) for dyt in disc_outputs_x]
 # d_y_pred = [tf.reshape(dyp, [-1]) for dyp in disc_outputs_xg]
-#-----------------------------------------------------------------------------------------------------------------------
 
 # Define Trainable Variables -------------------------------------------------------------------------------------------
 t_vars = tf.compat.v1.trainable_variables()
 # train_vars = [var for var in t_vars]    # trains all variables
-train_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, "encoder")   # trains the encoder variables
-train_vars = train_vars + tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, "generator")   # trains the generator variables
+train_vars = tf.compat.v1.get_collection(
+    tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, "encoder"
+)   # trains the encoder variables
+train_vars = train_vars + tf.compat.v1.get_collection(
+    tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, "generator"
+)   # trains the generator variables
 print("train_vars: ", train_vars)
-#-----------------------------------------------------------------------------------------------------------------------
 
 # Define Loss and Optimizer --------------------------------------------------------------------------------------------
 loss = 0
 for i in range(len(y_true)):
-    loss += tf.compat.v1.reduce_sum(tf.compat.v1.square(tf.compat.v1.subtract(y_pred[i], y_true[i])))   # loss used in first results
+    loss += tf.compat.v1.reduce_sum(
+        tf.compat.v1.square(tf.compat.v1.subtract(y_pred[i], y_true[i]))
+    )   # loss used in first results
    
 optimizer = tf.compat.v1.train.RMSPropOptimizer(learning_rate = 0.1).minimize(loss, var_list=train_vars)
-
-#-----------------------------------------------------------------------------------------------------------------------
 
 # Initialize variables and launch graph --------------------------------------------------------------------------------
 init = tf.compat.v1.initialize_all_variables()
@@ -153,15 +170,19 @@ with tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_option
 
         # if (epoch == (training_epochs-1)):
             # print("train_vars: ", train_vars)
-            autoencoderFunctions.dumpParameters(path_autoencoder_training_parameters + str(epoch), sess)    # Modificar o nome do arquivo ou pasta para salvar outros resultados
+            # Modificar o nome do arquivo ou pasta para salvar outros resultados
+            autoencoderFunctions.dumpParameters(path_autoencoder_training_parameters + str(epoch), sess)
 
-    np.savetxt(path_autoencoder_training_results + 'loss_per_epoch.txt', l, fmt='%f')   # Modificar o nome do arquivo ou pasta para salvar outros resultados
-    np.savetxt(path_autoencoder_training_results + 'a_values.txt', a_values, fmt='%f')  # Modificar o nome do arquivo ou pasta para salvar outros resultados
-    np.savetxt(path_autoencoder_training_results + 'b_values.txt', b_values, fmt='%f')  # Modificar o nome do arquivo ou pasta para salvar outros resultados
-    np.savetxt(path_autoencoder_training_results + 'c_values.txt', c_values, fmt='%f')  # Modificar o nome do arquivo ou pasta para salvar outros resultados
+    # Modificar o nome do arquivo ou pasta para salvar outros resultados
+    np.savetxt(path_autoencoder_training_results + 'loss_per_epoch.txt', l, fmt='%f')   
+    # Modificar o nome do arquivo ou pasta para salvar outros resultados
+    np.savetxt(path_autoencoder_training_results + 'a_values.txt', a_values, fmt='%f')  
+    # Modificar o nome do arquivo ou pasta para salvar outros resultados
+    np.savetxt(path_autoencoder_training_results + 'b_values.txt', b_values, fmt='%f')  
+    # Modificar o nome do arquivo ou pasta para salvar outros resultados
+    np.savetxt(path_autoencoder_training_results + 'c_values.txt', c_values, fmt='%f')
 
     elapsedTime = time() - begin
     print("elapsedTime: ", elapsedTime)
 
     print("Optimization Finished!")
-#-----------------------------------------------------------------------------------------------------------------------

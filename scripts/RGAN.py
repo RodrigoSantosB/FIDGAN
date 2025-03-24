@@ -1,10 +1,14 @@
-import numpy as np
-import tensorflow as tf
 import pdb
 import random
 import json
+from time import time
+from math import floor
+
+import numpy as np
+import tensorflow as tf
 from scipy.stats import mode
 
+# Local application imports
 import data_utils
 import plotting
 import model
@@ -12,58 +16,85 @@ import utils
 import eval
 import DR_discriminator
 
-from time import time
-from math import floor
+# Custom module imports
 from mmd import rbf_mmd2, median_pairwise_distance, mix_rbf_mmd2_and_ratio
 
+
+# Initialize script timing ---------------------------------------------------------------------------------------------
 begin = time()
 
+# Disable eager execution for TensorFlow v1 compatibility
 tf.compat.v1.disable_eager_execution()
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-# --- get settings --- #
-# parse command line arguments, or use defaults
+# Parse and load settings ----------------------------------------------------------------------------------------------
 parser = utils.rgan_options_parser()
 settings = vars(parser.parse_args())
-# if a settings file is specified, it overrides command line arguments/defaults
-if settings['settings_file']: settings = utils.load_settings_from_file(settings)
 
-# --- get data, split --- #
-data_path = './datasets/' + settings['data_load_from']
-print('Loading data from', data_path)
+# If a settings file is specified, it overrides command line arguments/defaults
+if settings['settings_file']:
+    settings = utils.load_settings_from_file(settings)
+
+# Load Data ------------------------------------------------------------------------------------------------------------
+data_path = f'./datasets/{settings["data_load_from"]}'
+print(f'Loading data from {data_path}')
+
+# Set evaluation flags
 settings["eval_an"] = False
 settings["eval_single"] = False
-samples, labels, index = data_utils.get_data(settings["data"], settings["seq_length"], settings["seq_step"],
-                                             settings["num_signals"], settings['sub_id'], settings["eval_single"],
-                                             settings["eval_an"], data_path)
-print('samples_size:',samples.shape)
-# -- number of variables -- #
+
+samples, labels, index = data_utils.get_data(
+    settings["data"], settings["seq_length"], settings["seq_step"],
+    settings["num_signals"], settings['sub_id'], settings["eval_single"],
+    settings["eval_an"], data_path
+)
+print(f'samples_size: {samples.shape}')
+
+# Determine the number of variables
 num_variables = samples.shape[2]
-print('num_variables:', num_variables)
-# --- save settings, data --- #
+print(f'num_variables: {num_variables}')
+
+# Save settings and print them 
 print('Ready to run with settings:')
-for (k, v) in settings.items(): print(v, '\t', k)
-# add the settings to local environment
-# WARNING: at this point a lot of variables appear
+for k, v in settings.items():
+    print(f'{v} \t {k}')
+
+# Add settings to local environment
 locals().update(settings)
-json.dump(settings, open('./experiments/settings/' + identifier + '.txt', 'w'), indent=0)
 
-# --- build model --- #
-# preparation: data placeholders and model parameters
+# Save settings to a file
+settings_path = f'./experiments/settings/{identifier}.txt'
+with open(settings_path, 'w') as f:
+    json.dump(settings, f, indent=0)
+
+
+# Build Model ----------------------------------------------------------------------------------------------------------
+
+# 1. Create placeholders for data and model parameters
 Z, X, T = model.create_placeholders(batch_size, seq_length, latent_dim, num_variables)
-discriminator_vars = ['hidden_units_d', 'seq_length', 'batch_size', 'batch_mean']
-discriminator_settings = dict((k, settings[k]) for k in discriminator_vars)
-generator_vars = ['hidden_units_g', 'seq_length', 'batch_size', 'learn_scale']
-generator_settings = dict((k, settings[k]) for k in generator_vars)
-generator_settings['num_signals'] = num_variables
 
-# model: GAN losses
+# 2. Extract relevant settings for the discriminator and generator
+discriminator_vars = ['hidden_units_d', 'seq_length', 'batch_size', 'batch_mean']
+discriminator_settings = {k: settings[k] for k in discriminator_vars}
+
+generator_vars = ['hidden_units_g', 'seq_length', 'batch_size', 'learn_scale']
+generator_settings = {k: settings[k] for k in generator_vars}
+generator_settings['num_signals'] = num_variables  # Add number of variables to generator settings
+
+# 3. Define GAN loss functions
 D_loss, G_loss = model.GAN_loss(Z, X, generator_settings, discriminator_settings)
-D_solver, G_solver, priv_accountant = model.GAN_solvers(D_loss, G_loss, learning_rate, batch_size,
-                                                        total_examples=samples.shape[0],
-                                                        l2norm_bound=l2norm_bound,
-                                                        batches_per_lot=batches_per_lot, sigma=dp_sigma, dp=dp)
-# model: generate samples for visualization
+
+# 4. Configure optimizers (solvers) for the discriminator and generator
+D_solver, G_solver, priv_accountant = model.GAN_solvers(
+    D_loss, G_loss, learning_rate, batch_size,
+    total_examples=samples.shape[0],
+    l2norm_bound=l2norm_bound,
+    batches_per_lot=batches_per_lot,
+    sigma=dp_sigma, 
+    dp=dp
+)
+
+# 5. Define the generator output for sample visualization
 G_sample = model.generator(Z, **generator_settings, reuse=True)
 
 # # --- evaluation settings--- #
@@ -95,21 +126,28 @@ G_sample = model.generator(Z, **generator_settings, reuse=True)
 # sigma_opt_thresh = 0.001
 # sigma_opt_vars = [var for var in tf.global_variables() if 'SIGMA_optimizer' in var.name]
 
-# --- run the program --- #
+# Run the Program ------------------------------------------------------------------------------------------------------
+
+# Configure TensorFlow session to allow GPU memory growth
 # tf.random.set_seed(1234)
 config = tf.compat.v1.ConfigProto()
 config.gpu_options.allow_growth = True
+
+# Initialize TensorFlow session
 sess = tf.compat.v1.Session(config=config)
-# sess = tf.Session()
 sess.run(tf.compat.v1.global_variables_initializer())
 
-# # -- plot the real samples -- #
-vis_real_indices = np.random.choice(len(samples), size=16)
+# Visualize Real Samples
+
+# Select 16 random real samples for visualization
+vis_real_indices = np.random.choice(len(samples), size=16, replace=False)
 vis_real = np.float32(samples[vis_real_indices, :, :])
+
+# Save plots of real samples
 plotting.save_plot_sample(vis_real, 0, identifier + '_real', n_samples=16, num_epochs=num_epochs)
 plotting.save_samples_real(vis_real, identifier)
 
-# --- train --- #
+# train ----------------------------------------------------------------------------------------------------------------
 train_vars = ['batch_size', 'D_rounds', 'G_rounds', 'use_time', 'seq_length', 'latent_dim']
 train_settings = dict((k, settings[k]) for k in train_vars)
 train_settings['num_signals'] = num_variables
@@ -137,7 +175,6 @@ for epoch in range(40):
     # # # save the generated samples in cased they might be useful for comparison
     # plotting.save_samples(vis_sample, identifier, epoch)
 
-    # -- print -- #
     print('epoch, D_loss_curr, G_loss_curr, seq_length')
     print('%d\t%.4f\t%.4f\t%d' % (epoch, D_loss_curr, G_loss_curr, seq_length))
 
