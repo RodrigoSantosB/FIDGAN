@@ -109,12 +109,16 @@ y_pred = [tf.compat.v1.reshape(yp, [-1]) for yp in decoder_outputs]
 # Define Trainable Variables -------------------------------------------------------------------------------------------
 t_vars = tf.compat.v1.trainable_variables()
 # train_vars = [var for var in t_vars]    # trains all variables
+
+# trains the encoder variables
 train_vars = tf.compat.v1.get_collection(
     tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, "encoder"
-)   # trains the encoder variables
+)   
+
+# trains the generator variables
 train_vars = train_vars + tf.compat.v1.get_collection(
     tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, "generator"
-)   # trains the generator variables
+)   
 print("train_vars: ", train_vars)
 
 # Define Loss and Optimizer --------------------------------------------------------------------------------------------
