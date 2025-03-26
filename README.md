@@ -39,6 +39,8 @@ python scripts/autoencoder.py --settings_file <nslkdd/wadi/swat>
 
 ### Perform Anomaly Detection
 ```sh
+python scripts/AD_autoencoder.py --settings_file <nslkdd_test/wadi_test/swat_test>
+
 python scripts/AD_computeResults.py --settings_file <nslkdd_test/wadi_test/swat_test>
 ```
 

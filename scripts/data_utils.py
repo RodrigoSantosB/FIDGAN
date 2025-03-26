@@ -1094,7 +1094,6 @@ def get_data(data_type, seq_length, seq_step, num_signals, sub_id, eval_single, 
     """
     Helper/wrapper function to get the requested data.
     """
-    print('data_type')
     labels = None
     index = None
     if data_type == 'load':

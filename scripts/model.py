@@ -1,3 +1,4 @@
+import os
 import tensorflow as tf
 import numpy as np
 # from data_utils import get_batch
@@ -25,6 +26,9 @@ Most of the models are copied from https://github.com/ratschlab/RGAN
 # --- to do with latent space --- #
 
 def sample_Z(batch_size, seq_length, latent_dim, use_time=False, use_noisy_time=False):
+    """
+    Sample from the latent space
+    """
     sample = np.float32(np.random.normal(size=[batch_size, seq_length, latent_dim]))
     if use_time:
         print('WARNING: use_time has different semantics')
@@ -84,7 +88,9 @@ def train_epoch(epoch, samples, labels, sess, Z, X, D_loss, G_loss, D_solver, G_
 
 
 def GAN_loss(Z, X, generator_settings, discriminator_settings):
-
+    """
+    Loss function for the GAN
+    """
     # normal GAN
     G_sample = generator(Z, **generator_settings)
     
@@ -107,7 +113,7 @@ def GAN_loss(Z, X, generator_settings, discriminator_settings):
 
 def GAN_solvers(D_loss, G_loss, learning_rate, batch_size, total_examples, l2norm_bound, batches_per_lot, sigma, dp=False):
     """
-    Optimizers
+    Optimizers for the GAN
     """
     discriminator_vars = [v for v in tf.compat.v1.trainable_variables() if v.name.startswith('discriminator')]
     generator_vars = [v for v in tf.compat.v1.trainable_variables() if v.name.startswith('generator')]
@@ -147,6 +153,9 @@ def GAN_solvers(D_loss, G_loss, learning_rate, batch_size, total_examples, l2nor
 # --- to do with the model --- #
 
 def create_placeholders(batch_size, seq_length, latent_dim, num_signals):
+    """
+    Create placeholders for the model according to the batch size, sequence length, latent dimension and number of signals
+    """
     Z = tf.compat.v1.placeholder(tf.float32, [batch_size, seq_length, latent_dim])
     X = tf.compat.v1.placeholder(tf.float32, [batch_size, seq_length, num_signals])
     T = tf.compat.v1.placeholder(tf.float32, [batch_size, seq_length, num_signals])
@@ -272,6 +281,8 @@ def dump_parameters(identifier, sess):
     """
     # dump_path = './experiments/parameters/' + identifier + '.npy'
     dump_path = './experiments/parameters/' + identifier + '.npy'
+    os.makedirs(os.path.dirname(dump_path), exist_ok=True)
+
     model_parameters = dict()
     for v in tf.compat.v1.trainable_variables():
         model_parameters[v.name] = sess.run(v)

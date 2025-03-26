@@ -12,38 +12,52 @@ from sklearn import metrics
 import matplotlib.pyplot as plt
 import os
 
+
+# Initialize script timing ---------------------------------------------------------------------------------------------
 begin = time()
 tf.compat.v1.disable_eager_execution()
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 # Load Data ------------------------------------------------------------------------------------------------------------
-# --- get settings --- #
 # parse command line arguments, or use defaults
 parser = utils.rgan_options_parser()
 settings = vars(parser.parse_args())
 # if a settings file is specified, it overrides command line arguments/defaults
 if settings['settings_file']: settings = utils.load_settings_from_file(settings)
 
-# --- get data, split --- #
 # samples, pdf, labels = data_utils.get_data(settings)
 data_path = './datasets/' + settings['data_load_from']
+print('-' * 100)
 print('Loading data from', data_path)
+
+# Set evaluation flags
 settings["eval_an"] = False
 settings["eval_single"] = False
-samples, labels, index = data_utils.get_data(settings["data"], settings["seq_length"], settings["seq_step"],
-                                             settings["num_signals"], settings['sub_id'], settings["eval_single"],
-                                             settings["eval_an"], data_path)
-# -- number of variables -- #
+
+samples, labels, index = data_utils.get_data(
+    settings["data"], settings["seq_length"], settings["seq_step"],
+    settings["num_signals"], settings['sub_id'], settings["eval_single"],
+    settings["eval_an"], data_path
+)
+
+# Determine the number of variables
 num_variables = samples.shape[2]
-print('num_variables:', num_variables)
-# --- save settings, data --- #
+print(f'num_variables: {num_variables}')
+
+# Save settings and print them 
 print('Ready to run with settings:')
 for (k, v) in settings.items(): print(v, '\t', k)
-# add the settings to local environment
-# WARNING: at this point a lot of variables appear
-locals().update(settings)
-json.dump(settings, open('./experiments/settings/' + identifier + '.txt', 'w'), indent=0)
-#-----------------------------------------------------------------------------------------------------------------------
+print('-' * 100)
+
+# Locally defined parameters and paths ---------------------------------------------------------------------------------
+identifier = settings["identifier"]
+path_autoencoder_training_parameters = settings["path_autoencoder_training_parameters"]
+seq_length = settings["seq_length"]
+
+# Save settings to a file
+settings_path = f'./experiments/settings/{identifier}.txt'
+with open(settings_path, 'w') as f:
+    json.dump(settings, f, indent=0)
 
 # Class Definition -----------------------------------------------------------------------------------------------------
 class myADclass():
@@ -82,7 +96,7 @@ class myADclass():
             I_mmb = self.index[start_pos:end_pos, :, :]
 
             # GAN parameters path to load pre trained discriminator and generator
-            para_path = './experiments/parameters/' + self.settings['sub_id'] + '_' + str(self.settings['seq_length']) + '_' + str(self.epoch_GAN) + '.npy'
+            para_path = './experiments/parameters/' + f"{self.settings['sub_id']}_{self.settings['seq_length']}_{self.settings['num_signals']}_{self.settings['latent_dim']}" + '/' + self.settings['sub_id'] + '_' + str(self.epoch_autoencoder) + '.npy'
             # Discriminator output values using pre trained GAN discriminator model
             if(dgbConfig != 2):
                 D_output, D_logits = autoencoderFunctions.discriminatorTrainedModel(self.settings, T_mb, para_path)
@@ -107,7 +121,7 @@ class myADclass():
         fill = np.ones([self.settings['batch_size'] - size, samples.shape[1], samples.shape[2]])
         batch = np.concatenate([samples[start_pos:end_pos, :, :], fill], axis=0)
         
-        para_path = './experiments/parameters/' + self.settings['sub_id'] + '_' + str(self.settings['seq_length']) + '_' + str(self.epoch_GAN) + '.npy'
+        para_path = './experiments/parameters/' + f"{self.settings['sub_id']}_{self.settings['seq_length']}_{self.settings['num_signals']}_{self.settings['latent_dim']}" + '/' + self.settings['sub_id'] + '_' + str(self.epoch_autoencoder) + '.npy'
         if(dgbConfig != 2):
             D_output, D_logits = autoencoderFunctions.discriminatorTrainedModel(self.settings, batch, para_path)
             D_test[start_pos:end_pos, :, :] = D_output[:size, :, :]
@@ -125,6 +139,7 @@ class myADclass():
         I_mb[start_pos:end_pos, :, :] = I_mmb
 
         #------------------------------------------------------------
+        path_AD_autoencoder_results = self.settings["path_AD_autoencoder_results"] + '/' + f'{sub_id}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id + '_' + str(self.epoch_autoencoder)
         savePath_DL1 = path_AD_autoencoder_results + "/DL1" + ".npy"
         savePath_DL2 = path_AD_autoencoder_results + "/DL2" + ".npy"
         savePath_LL = path_AD_autoencoder_results + "/LL" +  ".npy"
@@ -137,16 +152,26 @@ class myADclass():
             L_L, R_L = autoencoderFunctions.computeAndSaveRLoss(GG, T_samples, L_mb, self.settings['seq_step'], savePath_LL, savePath_RL)
         else:
             D_L_1, D_L_2, L_L, R_L, R_log_L = autoencoderFunctions.computeAndSaveDandRLosses(D_test, DL_test, GG, GG_l, T_samples, L_mb, self.settings['seq_step'], savePath_DL1, savePath_DL2, savePath_LL, savePath_RL, savePath_RL_log)
-        #------------------------------------------------------------
 
         return
-#-----------------------------------------------------------------------------------------------------------------------
+
 
 # Main Executtion ------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     print('Main Starting...')
 
+    tf.random.set_seed(1234)
+    config = tf.compat.v1.ConfigProto()
+    config.gpu_options.allow_growth = True
+    sess = tf.compat.v1.Session(config=config)
+    sess.run(tf.compat.v1.global_variables_initializer())
+
     # Locally defined parameters and paths ---------------------------------------------------------------------------------
+    sub_id = settings["sub_id"]
+    seq_length = settings["seq_length"]
+    num_signals = settings["num_signals"]
+    latent_dim = settings["latent_dim"]
+
     dgbConfig = settings["dgbConfig"]
     epochGAN_list = settings["epochGAN_AD_autoencoder_list"]                      # 8
     epoch_autoencoder_list = settings["epoch_autoencoder_AD_autoencoder_list"]    # 284
@@ -156,7 +181,6 @@ if __name__ == "__main__":
     #     os.mkdir(path_AD_autoencoder_results)
     # except:
     #     pass
-    #-----------------------------------------------------------------------------------------------------------------------
 
     # print("epochGAN: ", epochGAN)
     # print("epoch_autoencoder: ", epoch_autoencoder)
@@ -164,38 +188,32 @@ if __name__ == "__main__":
     # ad.ADfunc()
 
     # Only D for choosing the best GAN Epoch
-    # for epochGAN in range(100):
-    #     path_autoencoder_training_parameters = settings["path_autoencoder_training_parameters"] + '.npy'
-    #     path_AD_autoencoder_results = settings["path_AD_autoencoder_results"] + str(epochGAN)
-    #     try:
-    #         os.mkdir(path_AD_autoencoder_results)
-    #     except:
-    #         pass
+    # for epochGAN in range(3):
+    #     path_autoencoder_training_parameters = settings["path_autoencoder_training_parameters"] + '/' + f'{sub_id}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id + '_' + str(epochGAN) + '.npy'
+    #     path_AD_autoencoder_results = settings["path_AD_autoencoder_results"] + '/' + f'{sub_id}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id + '_' + str(epochGAN)
+    #     os.makedirs(path_AD_autoencoder_results, exist_ok=True)
+
     #     print("\n\nepochGAN: ", epochGAN)
     #     ad = myADclass(epochGAN, 0)
     #     ad.ADfunc()
 
     # for epochGAN in epochGAN_list:
     #     for epoch_autoencoder in epoch_autoencoder_list:
-    #         path_autoencoder_training_parameters = settings["path_autoencoder_training_parameters"] + str(epoch_autoencoder) + '.npy'
-    #         path_AD_autoencoder_results = settings["path_AD_autoencoder_results"] + str(epochGAN) + "_epochAutoencoder" + str(epoch_autoencoder)
-    #         try:
-    #             os.mkdir(path_AD_autoencoder_results)
-    #         except:
-    #             pass
+    #         path_autoencoder_training_parameters = settings["path_autoencoder_training_parameters"] + '/' + f'{sub_id}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id + '_' + str(epochGAN) + '.npy'
+    #         path_AD_autoencoder_results = settings["path_AD_autoencoder_results"] + '/' + f'{sub_id}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id + '_' + str(epochGAN)
+    #         os.makedirs(path_AD_autoencoder_results, exist_ok=True)
+
     #         print("\n\nepochGAN: ", epochGAN)
     #         print("epoch_autoencoder: ", epoch_autoencoder)
     #         ad = myADclass(epochGAN, epoch_autoencoder)
     #         ad.ADfunc()
 
     for epochGAN in [10]:
-        for epoch_autoencoder in range(300):
-            path_autoencoder_training_parameters = settings["path_autoencoder_training_parameters"] + str(epoch_autoencoder) + '.npy'
-            path_AD_autoencoder_results = settings["path_AD_autoencoder_results"] + str(epochGAN) + "_epochAutoencoder" + str(epoch_autoencoder)
-            try:
-                os.mkdir(path_AD_autoencoder_results)
-            except:
-                pass
+        for epoch_autoencoder in range(3):
+            path_autoencoder_training_parameters = settings["path_autoencoder_training_parameters"] + '/' + f'{sub_id}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id + '_' + str(epoch_autoencoder) + '.npy'
+            path_AD_autoencoder_results = settings["path_AD_autoencoder_results"] + '/' + f'{sub_id}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id + '_' + str(epoch_autoencoder)
+            os.makedirs(path_AD_autoencoder_results, exist_ok=True)
+
             print("\n\nepochGAN: ", epochGAN)
             print("epoch_autoencoder: ", epoch_autoencoder)
             ad = myADclass(epochGAN, epoch_autoencoder)
@@ -203,11 +221,8 @@ if __name__ == "__main__":
 
     # # Only D
     # for epochGAN in range(100):
-    #     path_AD_autoencoder_results = settings["path_AD_autoencoder_results"] + str(epochGAN)
-    #     try:
-    #         os.mkdir(path_AD_autoencoder_results)
-    #     except:
-    #         pass
+    #     path_AD_autoencoder_results = settings["path_AD_autoencoder_results"] + '/' + f'{sub_id}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id + '_' + str(epochGAN)
+    #     os.makedirs(path_AD_autoencoder_results, exist_ok=True)
     #     print("\n\nepochGAN: ", epochGAN)
     #     ad = myADclass(epochGAN, 0)
     #     ad.ADfunc()
@@ -215,5 +230,3 @@ if __name__ == "__main__":
     print('Main Terminating...')
     end = time() - begin
     print('Testing terminated | Execution time=%d s' % (end))
-#-----------------------------------------------------------------------------------------------------------------------
-

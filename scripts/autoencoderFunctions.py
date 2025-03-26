@@ -10,7 +10,9 @@ from time import time
 
 # Helper Functions -----------------------------------------------------------------------------------------------------
 def loadParameters(identifier):
-
+    """
+    Load model parameters from a numpy file.
+    """
     np_load_old = np.load
     # modify the default parameters of np.load
     np.load = lambda *a,**k: np_load_old(*a, allow_pickle=True, **k)
@@ -21,7 +23,9 @@ def loadParameters(identifier):
     return model_parameters
 
 def dumpParameters(identifier, sess):
-    # Save model parmaters to a numpy file
+    """
+    Save model parameters to a numpy file.
+    """
     dump_path = identifier + '.npy'
     model_parameters = dict()
     for v in tf.compat.v1.trainable_variables():
@@ -214,6 +218,9 @@ def discriminatorModelPred(x, hidden_units_d, reuse=False, parameters=None):
 
 # Anomaly Detection Functions ------------------------------------------------------------------------------------------
 def discriminatorTrainedModel(settings, samples, para_path):
+    """
+    Returns the discrimination results of num_samples testing samples from a trained model described by settings dict, for ONE sample discrimination
+    """
     # Returns the discrimination results of num_samples testing samples from a trained model described by settings dict, for ONE sample discrimination
     
     # if settings is a string, assume it's an identifier and load

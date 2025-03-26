@@ -46,6 +46,9 @@ def visualise_at_epoch(vis_sample, data, predict_labels, epoch,
 
 
 def save_plot_sample(samples, idx, identifier, n_samples=16, num_epochs=None, ncol=4):
+    """
+    Save a plot of the samples in a grid.
+    """
     assert n_samples <= samples.shape[0]
     assert n_samples % ncol == 0
     sample_length = samples.shape[1]
@@ -384,13 +387,17 @@ def plot_trace(identifier, xmax=250, final=False, dp=False):
 
 
 def save_samples(vis_sample, identifier, epoch):
-
+    """
+    Save the generated samples.
+    """
     np.save('./experiments/plots/gs/' + identifier + '_gs_%s.npy' % epoch, vis_sample)
 
     return True
 
 def save_samples_real(vis_real, identifier):
-
+    """
+    Save the real samples.
+    """
     np.save('./experiments/plots/gs/' + identifier + '_gs_real.npy',  vis_real)
 
     return True

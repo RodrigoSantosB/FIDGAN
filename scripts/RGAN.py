@@ -1,3 +1,4 @@
+import os
 import pdb
 import random
 import json
@@ -37,6 +38,7 @@ if settings['settings_file']:
 
 # Load Data ------------------------------------------------------------------------------------------------------------
 data_path = f'./datasets/{settings["data_load_from"]}'
+print('-' * 100)
 print(f'Loading data from {data_path}')
 
 # Set evaluation flags
@@ -58,9 +60,27 @@ print(f'num_variables: {num_variables}')
 print('Ready to run with settings:')
 for k, v in settings.items():
     print(f'{v} \t {k}')
+print('-' * 100)
 
-# Add settings to local environment
-locals().update(settings)
+# Locally defined parameters and paths ---------------------------------------------------------------------------------
+identifier = settings['identifier']
+
+batch_size = settings['batch_size']
+seq_length = settings['seq_length']
+latent_dim = settings['latent_dim']
+
+learning_rate = settings['learning_rate']
+l2norm_bound = settings['l2norm_bound']
+batches_per_lot = settings['batches_per_lot']
+dp_sigma = settings['dp_sigma']
+dp = settings['dp']
+num_generated_features = settings['num_generated_features']
+
+num_epochs = settings['num_epochs']
+sub_id = settings['sub_id']
+
+use_time = settings['use_time']
+num_signals = settings['num_signals']
 
 # Save settings to a file
 settings_path = f'./experiments/settings/{identifier}.txt'
@@ -69,7 +89,6 @@ with open(settings_path, 'w') as f:
 
 
 # Build Model ----------------------------------------------------------------------------------------------------------
-
 # 1. Create placeholders for data and model parameters
 Z, X, T = model.create_placeholders(batch_size, seq_length, latent_dim, num_variables)
 
@@ -97,17 +116,16 @@ D_solver, G_solver, priv_accountant = model.GAN_solvers(
 # 5. Define the generator output for sample visualization
 G_sample = model.generator(Z, **generator_settings, reuse=True)
 
-# # --- evaluation settings--- #
-#
+# Evaluation settings --------------------------------------------------------------------------------------------------
 # # frequency to do visualisations
 # num_samples = samples.shape[0]
 # vis_freq = max(6600 // num_samples, 1)
 # eval_freq = max(6600// num_samples, 1)
-#
+
 # # get heuristic bandwidth for mmd kernel from evaluation samples
 # heuristic_sigma_training = median_pairwise_distance(samples)
 # best_mmd2_so_far = 1000
-#
+
 # # optimise sigma using that (that's t-hat)
 # batch_multiplier = 5000 // batch_size
 # eval_size = batch_multiplier * batch_size
@@ -115,13 +133,19 @@ G_sample = model.generator(Z, **generator_settings, reuse=True)
 # eval_real_PH = tf.placeholder(tf.float32, [eval_eval_size, seq_length, num_generated_features])
 # eval_sample_PH = tf.placeholder(tf.float32, [eval_eval_size, seq_length, num_generated_features])
 # n_sigmas = 2
-# sigma = tf.get_variable(name='sigma', shape=n_sigmas, initializer=tf.constant_initializer(
-#     value=np.power(heuristic_sigma_training, np.linspace(-1, 3, num=n_sigmas))))
+# sigma = tf.get_variable(
+#     name='sigma', shape=n_sigmas, 
+#     initializer=tf.constant_initializer(
+#         value=np.power(heuristic_sigma_training, np.linspace(-1, 3, num=n_sigmas))
+#     )
+# )
 # mmd2, that = mix_rbf_mmd2_and_ratio(eval_real_PH, eval_sample_PH, sigma)
+
 # with tf.variable_scope("SIGMA_optimizer"):
 #     sigma_solver = tf.train.RMSPropOptimizer(learning_rate=0.05).minimize(-that, var_list=[sigma])
 #     # sigma_solver = tf.train.AdamOptimizer().minimize(-that, var_list=[sigma])
 #     # sigma_solver = tf.train.AdagradOptimizer(learning_rate=0.1).minimize(-that, var_list=[sigma])
+
 # sigma_opt_iter = 2000
 # sigma_opt_thresh = 0.001
 # sigma_opt_vars = [var for var in tf.global_variables() if 'SIGMA_optimizer' in var.name]
@@ -129,7 +153,7 @@ G_sample = model.generator(Z, **generator_settings, reuse=True)
 # Run the Program ------------------------------------------------------------------------------------------------------
 
 # Configure TensorFlow session to allow GPU memory growth
-# tf.random.set_seed(1234)
+tf.random.set_seed(1234)
 config = tf.compat.v1.ConfigProto()
 config.gpu_options.allow_growth = True
 
@@ -144,10 +168,12 @@ vis_real_indices = np.random.choice(len(samples), size=16, replace=False)
 vis_real = np.float32(samples[vis_real_indices, :, :])
 
 # Save plots of real samples
-plotting.save_plot_sample(vis_real, 0, identifier + '_real', n_samples=16, num_epochs=num_epochs)
-plotting.save_samples_real(vis_real, identifier)
+os.makedirs(f'./experiments/plots/gs/{identifier}_{seq_length}_{num_signals}_{latent_dim}', exist_ok=True)
 
-# train ----------------------------------------------------------------------------------------------------------------
+plotting.save_plot_sample(vis_real, 0, f'{identifier}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id + '_real', n_samples=16, num_epochs=num_epochs)
+plotting.save_samples_real(vis_real, f'{identifier}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id)
+
+# Train ----------------------------------------------------------------------------------------------------------------
 train_vars = ['batch_size', 'D_rounds', 'G_rounds', 'use_time', 'seq_length', 'latent_dim']
 train_settings = dict((k, settings[k]) for k in train_vars)
 train_settings['num_signals'] = num_variables
@@ -155,30 +181,29 @@ train_settings['num_signals'] = num_variables
 t0 = time()
 MMD = np.zeros([num_epochs, ])
 
-# for epoch in range(num_epochs):
-for epoch in range(40):
+for epoch in range(num_epochs):
     # -- train epoch -- #
     D_loss_curr, G_loss_curr = model.train_epoch(epoch, samples, labels, sess, Z, X, D_loss, G_loss, D_solver, G_solver, **train_settings)
 
-    # # -- eval -- #
+    # -- eval -- #
     # # visualise plots of generated samples, with/without labels
     # # choose which epoch to visualize
-    #
+    
     # # random input vectors for the latent space, as the inputs of generator
     # vis_ZZ = model.sample_Z(batch_size, seq_length, latent_dim, use_time)
-    #
-    # # # -- generate samples-- #
+    
+    # # -- generate samples-- #
     # vis_sample = sess.run(G_sample, feed_dict={Z: vis_ZZ})
-    # # # -- visualize the generated samples -- #
-    # plotting.save_plot_sample(vis_sample, epoch, identifier, n_samples=16, num_epochs=None, ncol=4)
-    # # plotting.save_plot_sample(vis_sample, 0, identifier + '_real', n_samples=16, num_epochs=num_epochs)
+    # # -- visualize the generated samples -- #
+    # plotting.save_plot_sample(vis_sample, epoch, f'{identifier}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id, n_samples=16, num_epochs=None, ncol=4)
+    # # plotting.save_plot_sample(vis_sample, 0, {identifier} + '_real', n_samples=16, num_epochs=num_epochs)
     # # # save the generated samples in cased they might be useful for comparison
-    # plotting.save_samples(vis_sample, identifier, epoch)
-
+    # plotting.save_samples(vis_sample, f'{identifier}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id, epoch)
+    print('-' * 100)
     print('epoch, D_loss_curr, G_loss_curr, seq_length')
     print('%d\t%.4f\t%.4f\t%d' % (epoch, D_loss_curr, G_loss_curr, seq_length))
 
-    # # -- compute mmd2 and if available, prob density -- #
+    # -- compute mmd2 and if available, prob density -- #
     # if epoch % eval_freq == 0:
     #     # how many samples to evaluate with?
     #     eval_Z = model.sample_Z(eval_size, seq_length, latent_dim, use_time)
@@ -187,12 +212,12 @@ for epoch in range(40):
     #         eval_sample[i * batch_size:(i + 1) * batch_size, :, :] = sess.run(G_sample, feed_dict={ Z: eval_Z[i * batch_size:(i + 1) * batch_size]})
     #     eval_sample = np.float32(eval_sample)
     #     eval_real = np.float32(samples['vali'][np.random.choice(len(samples['vali']), size=batch_multiplier * batch_size), :, :])
-    #
+    
     #     eval_eval_real = eval_real[:eval_eval_size]
     #     eval_test_real = eval_real[eval_eval_size:]
     #     eval_eval_sample = eval_sample[:eval_eval_size]
     #     eval_test_sample = eval_sample[eval_eval_size:]
-    #
+    
     #     # MMD
     #     # reset ADAM variables
     #     sess.run(tf.initialize_variables(sigma_opt_vars))
@@ -211,15 +236,14 @@ for epoch in range(40):
     #     except ValueError:
     #         mmd2 = 'NA'
     #         that = 'NA'
-    #
+    
     #     MMD[epoch, ] = mmd2
 
     # -- save model parameters -- #
-    model.dump_parameters(sub_id + '_' + str(seq_length) + '_' + str(epoch), sess)
+    model.dump_parameters(f'{identifier}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id + '_' + str(epoch), sess)  # save at './experiments/parameters/wadi_ _ _/wadi_...'
 
-np.save('./experiments/plots/gs/' + identifier + '_' + 'MMD.npy', MMD)
+np.save('./experiments/plots/gs/' + f'{identifier}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id + '_' + 'MMD.npy', MMD)
 
 end = time() - begin
-print('Training terminated | Training time=%d s' %(end) )
-
+print('-' * 100)
 print("Training terminated | training time = %ds  " % (time() - begin))

@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 from sklearn import metrics
@@ -12,12 +13,14 @@ from time import time
 #plt.rcParams["font.family"] = "Times New Roman"
 # plt.rcParams['font.family'] = 'serif'
 
+# Initialize script timing ---------------------------------------------------------------------------------------------
 begin = time()
 
-# --- get settings --- #
+# Parse and load settings ----------------------------------------------------------------------------------------------
 # parse command line arguments, or use defaults
 parser = utils.rgan_options_parser()
 settings = vars(parser.parse_args())
+
 # if a settings file is specified, it overrides command line arguments/defaults
 if settings['settings_file']: settings = utils.load_settings_from_file(settings)
 
@@ -122,22 +125,28 @@ def plotAucRoc(LL, drScores, aucRocMaxIndex, savePathPlotAucRoc, label, linestyl
     plt.show()
     plt.savefig(savePathPlotAucRoc)
 
-#-----------------------------------------------------------------------------------------------------------------------
 
 # Main Executtion ------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     print('Main Starting...')
+
+    # Locally defined parameters and paths ---------------------------------------------------------------------------------
+    sub_id = settings["sub_id"]
+    seq_length = settings["seq_length"]
+    num_signals = settings["num_signals"]
+    latent_dim = settings["latent_dim"]
     
     for epochGAN in [10]:
-        for epoch_autoencoder in range(15):
+        for epoch_autoencoder in range(3):
         # for epoch_autoencoder in range(0,35):
             # for epoch_autoencoder in [5]:
-            path_AD_autoencoder_results = settings["path_AD_autoencoder_results"] + str(epochGAN) + "_epochAutoencoder" + str(epoch_autoencoder)
+            path_AD_autoencoder_results = settings["path_AD_autoencoder_results"] + '/' + f'{sub_id}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id + '_' + str(epoch_autoencoder)
             savePath_DL1 = path_AD_autoencoder_results + "/DL1.npy"
             savePath_DL2 = path_AD_autoencoder_results + "/DL2.npy"
             savePath_LL = path_AD_autoencoder_results + "/LL.npy"
             savePath_RL = path_AD_autoencoder_results + "/RL.npy"
-            savePathPlotAucRoc = settings["path_savePlotAucRoc"] + "/ROC_Curve_" + str(epochGAN) + "_" + str(epoch_autoencoder) + ".pdf"
+            savePathPlotAucRoc = settings["path_savePlotAucRoc"] + '/' + f'{sub_id}_{seq_length}_{num_signals}_{latent_dim}' + '/' + sub_id + '_' + str(epoch_autoencoder) + ".pdf"
+            os.makedirs(os.path.dirname(savePathPlotAucRoc), exist_ok=True)
 
             print("\epochGAN: ", epochGAN)
             print("epoch_autoencoder: ", epoch_autoencoder)
@@ -159,13 +168,14 @@ if __name__ == "__main__":
             aucRocMaxIndex_CombDG, aucRocMax_CombDG = computeAucRocs(LL, drScores_CombDG)
             labelCombDR = 'ROC Curve D and G Combined; AUC = ' + str('%.4f'%(aucRocMax_CombDG))
 
-            f = open(settings["path_savePlotAucRoc"] + "/aucRocMaxValues.txt", "a")
+            temp_path = settings["path_savePlotAucRoc"] + '/' + f'{sub_id}_{seq_length}_{num_signals}_{latent_dim}' + "/aucRocMaxValues.txt", "a"
+            f = open(temp_path, "a")
             f.write("\nepochGAN: " + str(epochGAN) + "epoch_autoencoder: " + str(epoch_autoencoder) + "   -   aucRocMax_D: "  + str(aucRocMax_D) + ", aucRocMax_G: "  + str(aucRocMax_G) + ", aucRocMax_CombDG: "  + str(aucRocMax_CombDG))
             f.close()
 
-            # plotAucRoc(LL, drScores_D, aucRocMaxIndex_D, savePathPlotAucRoc, labelOnlyD, linestyle=':', marker='o', color='r', markersize = 6)
-            # plotAucRoc(LL, drScores_G, aucRocMaxIndex_G, savePathPlotAucRoc, labelOnlyR, linestyle='-.', marker='s', color='g', markersize = 7)
-            # plotAucRoc(LL, drScores_CombDG, aucRocMaxIndex_CombDG, savePathPlotAucRoc, labelCombDR, linestyle='--', marker='^', color='b', markersize = 6)
+            plotAucRoc(LL, drScores_D, aucRocMaxIndex_D, savePathPlotAucRoc, labelOnlyD, linestyle=':', marker='o', color='r', markersize = 6)
+            plotAucRoc(LL, drScores_G, aucRocMaxIndex_G, savePathPlotAucRoc, labelOnlyR, linestyle='-.', marker='s', color='g', markersize = 7)
+            plotAucRoc(LL, drScores_CombDG, aucRocMaxIndex_CombDG, savePathPlotAucRoc, labelCombDR, linestyle='--', marker='^', color='b', markersize = 6)
 
     print('Main Terminating...')
     end = time() - begin

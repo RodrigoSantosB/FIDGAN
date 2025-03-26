@@ -48,9 +48,9 @@
 "latent_dim_autoencoder": 15,
 "hidden_units_autoencoder": 100,
 "learning_rate_autoencoder": 0.001,
-"training_epochs_autoencoder": 800,
+"training_epochs_autoencoder": 300,
 "display_step_autoencoder": 1,
-"path_autoencoder_training_parameters": "./experimentsAE_wadi/autoencoderTraining/trainingParameters_ganEpoch26/autoencoder_wadi_30_",
-"path_autoencoder_training_results": "./experimentsAE_wadi/autoencoderTraining/trainingResults_ganEpoch26/",
+"path_autoencoder_training_parameters": "./experiments/autoencoder/parameters",
+"path_autoencoder_training_results": "./experiments/autoencoder/results",
 "generatorEpoch": 3
 }
