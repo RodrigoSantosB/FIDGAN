@@ -83,6 +83,8 @@ def computeAucRocs(LL, drScores):
     aucRocMax = 0
     aucRocMaxIndex = 0
     index = 0
+    # threshold = np.mean(LL)  # Median-based threshold
+    # LL_binary = (LL >= threshold).astype(int)
     for dr_score in drScores:
         aucRoc = roc_auc_score(LL, dr_score)
         print("aucRoc: ", aucRoc)
@@ -95,6 +97,8 @@ def computeAucRocs(LL, drScores):
     return aucRocMaxIndex, aucRocMax
 
 def plotAucRoc(LL, drScores, aucRocMaxIndex, savePathPlotAucRoc, label, linestyle, marker, color, markersize):
+    # threshold = np.mean(LL)  # Median-based threshold
+    # LL_binary = (LL >= threshold).astype(int)
     fpr, tpr, thresholds = metrics.roc_curve(LL, drScores[aucRocMaxIndex], pos_label=1)
 
     fpr2 = []
@@ -168,7 +172,7 @@ if __name__ == "__main__":
             aucRocMaxIndex_CombDG, aucRocMax_CombDG = computeAucRocs(LL, drScores_CombDG)
             labelCombDR = 'ROC Curve D and G Combined; AUC = ' + str('%.4f'%(aucRocMax_CombDG))
 
-            temp_path = settings["path_savePlotAucRoc"] + '/' + f'{sub_id}_{seq_length}_{num_signals}_{latent_dim}' + "/aucRocMaxValues.txt", "a"
+            temp_path = settings["path_savePlotAucRoc"] + '/' + f'{sub_id}_{seq_length}_{num_signals}_{latent_dim}' + "/aucRocMaxValues.txt"
             f = open(temp_path, "a")
             f.write("\nepochGAN: " + str(epochGAN) + "epoch_autoencoder: " + str(epoch_autoencoder) + "   -   aucRocMax_D: "  + str(aucRocMax_D) + ", aucRocMax_G: "  + str(aucRocMax_G) + ", aucRocMax_CombDG: "  + str(aucRocMax_CombDG))
             f.close()
