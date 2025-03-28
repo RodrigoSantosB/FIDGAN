@@ -1127,6 +1127,12 @@ def get_data(data_type, seq_length, seq_step, num_signals, sub_id, eval_single, 
     elif data_type == 'nslkdd_test':
         # samples, labels, index = nslkdd_test2(seq_length, seq_step, num_signals, data_path)
         samples, labels, index = kdd99_test(seq_length, seq_step, num_signals, data_path)
+    elif data_type == 'cicids':
+        # samples, labels = wadi2(seq_length, seq_step, num_signals, data_path)
+        samples, labels = kdd99(seq_length, seq_step, num_signals, data_path)
+    elif data_type == 'cicids_test':
+        # samples, labels, index = wadi_test(seq_length, seq_step, num_signals, data_path)
+        samples, labels, index = kdd99_test(seq_length, seq_step, num_signals, data_path)
     else:
         raise ValueError(data_type)
     print('Generated/loaded', len(samples), 'samples from data-type', data_type)
