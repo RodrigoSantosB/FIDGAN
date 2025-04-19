@@ -13,20 +13,20 @@ if command -v conda &> /dev/null; then
     # Initialize and activate Conda environment
     conda init bash
     . ~/.bashrc
-    conda create --name fid-gan python=3.9 -y
+    conda create --name fid-gan python=3.7 -y
     conda activate fid-gan
 else
     echo "Conda not found. Using Python venv instead."
     
-    # Ensure Python 3.9 is installed
-    if ! command -v python3.9 &> /dev/null; then
-        echo "Python 3.9 is not installed. Please install it first."
+    # Ensure Python 3.7 is installed
+    if ! command -v python3.7 &> /dev/null; then
+        echo "Python 3.7 is not installed. Please install it first."
         exit 1
     fi
 
     # Create and activate a virtual environment with venv
-    python3.9 -m venv fid-gan-venv
-    source fid-gan-venv/bin/activate
+    python3.7 -m venv fid-gan-venv
+    source fid-gan/bin/activate
     echo "Virtual environment (venv) activated."
 fi
 
