@@ -14,13 +14,14 @@ If you wish to cite our work, use:
 
 Before running the code, ensure you have the following:
 
-- **Python 3.9**
+- **Python 3.7**
 - **TensorFlow 2.1** or later
-- Additional libraries listed in the `requirements.txt` file
+- Additional libraries listed in the `environment.yaml` file
 
 To install dependencies, run:
 ```sh
-pip install -r requirements.txt
+conda create -f environment.yaml
+conda activate fid-gan
 ```
 
 ## Setup and Execution
